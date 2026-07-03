@@ -1,0 +1,29 @@
+The `misa` command-line tool produces compressed `.misa77` containers in a format that constitutes a few headers, followed by the raw compression stream (see [`format.md`](format.md))
+
+## Compressed file (`.misa77`)
+
+A `.misa77` file is a 6-byte container header followed by the raw compression stream:
+
+```text
+[4 bytes  magic = "MSA7" (0x4D 0x53 0x41 0x37)]
+[1 byte   file format version]
+[1 byte   flags]
+[raw compression stream ...]
+```
+
+- `magic`: identifies the file and lets the tool reject input that is trivially non-misa77. Note that the internal decompress primitive does not perform any validation on the raw compressed stream, so this check only exists to gracefully handle cases where someone accidentally tries to decompress a non-`.misa77` file with `misa`.
+- `version`: it is the container version ID. A build only decodes containers whose version it recognizes (currently `1`), anything else is rejected.
+- `flags`: currently `0`, to be used in the future.
+
+## Parameter file (`.misap`)
+
+`misa suggest` writes a `.misap` file holding one tuned parameter vector, which `misa compress --params FILE.misap` reads back. It is a single line of space-separated unsigned integers:
+
+```text
+<schema> <use_default> <size> <block> <short4_7> <short8_15> <lit7> <lit17> <lit33>
+```
+
+- `schema` is the format version (currently `1`); a file with a different schema is
+  rejected.
+- `use_default` is `0` or `1`.
+- The remaining seven fields are the tuning weights in the `param` object passed to `misa77::experimental::compress_tuned`, in the order above.
