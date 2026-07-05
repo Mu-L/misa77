@@ -9,7 +9,14 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # Pass -DMISA77_MARCH=native for a maximal build run on the same machine.
-set(MISA77_MARCH "x86-64" CACHE STRING "-march for the misa77 dispatchers/CLI")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
+    set(MISA77_MARCH_DEFAULT "x86-64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+    set(MISA77_MARCH_DEFAULT "armv8-a")
+else()
+    set(MISA77_MARCH_DEFAULT "")
+endif()
+set(MISA77_MARCH "${MISA77_MARCH_DEFAULT}" CACHE STRING "-march for the misa77 dispatchers/CLI")
 
 add_library(misa77
     src/format.h
@@ -33,14 +40,17 @@ add_library(misa77
 target_include_directories(misa77 PUBLIC include)
 target_include_directories(misa77 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_features(misa77 PUBLIC cxx_std_20)
-target_compile_options(misa77 PRIVATE -Wall -Wextra -Wpedantic -march=${MISA77_MARCH})
+target_compile_options(misa77 PRIVATE -Wall -Wextra -Wpedantic)
+if(MISA77_MARCH)
+    target_compile_options(misa77 PRIVATE -march=${MISA77_MARCH})
+endif()
 
-# The AVX2/SSE2 codec TUs use x86 intrinsics, so they build only on x86, each
-# pinned to its own ISA. These pins are independent of MISA77_MARCH so the
+# The AVX2/SSE2 codec TUs use x86 intrinsics, so they build only on 64-bit x86,
+# each pinned to its own ISA. These pins are independent of MISA77_MARCH so the
 # fallbacks stay genuine: a non-AVX2 CPU must be able to run the SSE2/portable
 # path, so it must not inherit -mavx2/-march=native. (For the same reason, do NOT
 # enable LTO on this library).
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|i[3-6]86|AMD64|amd64")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
     target_sources(misa77 PRIVATE
         src/isa/target_avx2.cpp
         src/isa/target_sse2.cpp
@@ -58,7 +68,9 @@ endif()
 add_executable(misa77_cli app/misa77_cli.cpp)
 set_target_properties(misa77_cli PROPERTIES OUTPUT_NAME misa)
 target_link_libraries(misa77_cli PRIVATE misa77)
-target_compile_options(misa77_cli PRIVATE -march=${MISA77_MARCH})
+if(MISA77_MARCH)
+    target_compile_options(misa77_cli PRIVATE -march=${MISA77_MARCH})
+endif()
 
 option(MISA77_BUILD_TESTS "Build misa77 tests" ON)
 if(MISA77_BUILD_TESTS)

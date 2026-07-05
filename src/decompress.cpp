@@ -42,7 +42,7 @@ namespace misa77
                         uint8_t* __restrict dst,
                         uint64_t dst_cap)
     {
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__)
         if (__builtin_cpu_supports("avx2"))
             return decompress_avx2(src, src_size, dst, dst_cap);
         return decompress_sse2(src, src_size, dst, dst_cap);

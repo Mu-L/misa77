@@ -38,7 +38,7 @@ namespace
     namespace fs = std::filesystem;
     using misa77::experimental::param;
 
-    constexpr std::string_view VERSION_STR = "0.1.0";
+    constexpr std::string_view VERSION_STR = "0.1.1";
 
     constexpr char MAGIC[4] = {'M', 'S', 'A', '7'};
     constexpr uint8_t VERSION = 1;

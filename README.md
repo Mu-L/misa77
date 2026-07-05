@@ -1,6 +1,6 @@
-# misa77 (0.1.0)
+# misa77 (0.1.1)
 
-misa77 is a LZ-based codec that targets the write-once, read-many niche. In particular, it aims to satisfy the following criteria:
+misa77 is an LZ-based codec that targets the write-once, read-many niche. In particular, it aims to satisfy the following criteria:
 
 - Extremely high decompression throughput (single-threaded).
 - Modest compression ratios (it has no entropy backend, so one can obviously not compare it to something like zstd, but LZ4 at high effort levels is a good reference point).
@@ -13,14 +13,14 @@ In addition, misa77 has a somewhat synergizing tendency to decompress highly com
 - It offers particularly high decompression throughput on highly compressible files.
 - Even for moderately compressible files, spending more effort during compression to get a more compressed result leads to better decompression throughput (alongside the natural advantage of better ratios).
 
-This makes high-effort compression particularly attractive for misa77, and inspires some experimental compression modes (refer to [src/experimental/](src/experimental/)) that aim to spend more effort at compression time to produce a compressed stream that is friendlier to the microarchitectures of most CPUs when decompressing said streams. As of v0.1.0, there are two experimental compressors: 
+This makes high-effort compression particularly attractive for misa77, and inspires some experimental compression modes (refer to [src/experimental/](src/experimental/)) that aim to spend more effort at compression time to produce a compressed stream that is friendlier to the microarchitectures of most CPUs when decompressing said streams. As of v0.1.1, there are two experimental compressors: 
 
 1. `misa77::experimental::adaptive_compress` for homogeneous data. 
 2. `misa77::experimental::yolo_compress`, which is more general-purpose and has lesser overhead than (1).
 
 ## Documentation
 
-The container format for `.misa77` files and the underlying stream format (used by misa77 for a single file) can be found in [`docs/`](docs/).
+The underlying stream format (used by the library functions) and the container format for `.misa77` files (produced by the CLI) can be found in [`docs/`](docs/).
 
 ## Benchmarks
 
@@ -129,7 +129,8 @@ On the compressible files, misa77 sits on the decode-throughput/ratio Pareto fro
 
 - A C++20 compiler (both GCC and Clang are fine).
 - CMake >= 3.20.
-- The `misa` CLI needs POSIX (Linux, macOS). The library itself is portable C++ and will work on any little-endian system.
+- A little-endian 64-bit system.
+- The `misa` CLI needs POSIX (Linux, macOS).
 
 Note: On x86-64, AVX2/SSE2 are selected at runtime. Other architectures use a portable path that has no explicit intrinsics, but is easily auto-vectorizable by compilers (and from my testing, does auto-vectorize on Apple ARM at the very least).
 
@@ -140,7 +141,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-This produces the `misa` CLI at `build/misa`. For a binary tuned to the exact machine you'll run it on, add `-DMISA77_MARCH=native`. To run the round-trip test:
+This produces the `misa` CLI at `build/misa`. For a binary tuned to the exact machine you'll run it on, add `-DMISA77_MARCH=native` (I recommend this). To run the round-trip test:
 
 ```sh
 ctest --test-dir build
@@ -178,7 +179,7 @@ misa compress --params data.misap data.bin
 
 ## Status
 
-1. misa77 is v0.1.0 and pre-freeze, so the format may change unexpectedly. 
+1. misa77's format may change unexpectedly as it's still v0.x.y. 
 2. The decoder assumes that the input is a valid misa77 stream. Invalid input is UB and I offer no guarantees for whatever misa77 does in this case.
 3. It's been through some local fuzzing but is not hardened, so treat it as experimental.
 
@@ -192,7 +193,7 @@ Inspiration has been taken from:
 - [zxc](https://github.com/hellobertrand/zxc)
 - [lizard](https://github.com/inikep/lizard)
 
-Lastly, Claude Opus 4.8 helped a lot with scripting/tooling.
+Lastly, Claude Opus 4.8 helped a lot with scripting, tooling, and building the CLI.
 
 ## License
 

@@ -23,7 +23,7 @@ namespace misa77
                                 uint64_t dst_cap,
                                 const param& given)
         {
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__)
             if (__builtin_cpu_supports("avx2"))
                 return compress_tuned_avx2(src, src_size, dst, dst_cap, given);
             return compress_tuned_sse2(src, src_size, dst, dst_cap, given);
@@ -45,7 +45,7 @@ namespace misa77
                                   uint8_t option)
         {
             auto fn = &compress_tuned_portable;
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__)
             if (__builtin_cpu_supports("avx2"))
                 fn = &compress_tuned_avx2;
             else
@@ -107,7 +107,7 @@ namespace misa77
             param opt =
                 suggest_homogeneous(src, std::min(src_size, sample_size), dst, dst_cap, option);
 
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__)
             if (__builtin_cpu_supports("avx2"))
                 return compress_tuned_avx2(src, src_size, dst, dst_cap, opt);
             return compress_tuned_sse2(src, src_size, dst, dst_cap, opt);
