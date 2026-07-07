@@ -89,12 +89,11 @@ namespace misa77
         } // namespace
 
         template <class isa_lib>
-        [[gnu::always_inline]]
-        inline uint64_t compress_tuned_impl(const uint8_t* __restrict src,
-                                            uint64_t src_size,
-                                            uint8_t* __restrict dst,
-                                            uint64_t dst_cap,
-                                            const param& given)
+        uint64_t compress_tuned_impl(const uint8_t* __restrict src,
+                                     uint64_t src_size,
+                                     uint8_t* __restrict dst,
+                                     uint64_t dst_cap,
+                                     const param& given)
         {
             if (given.use_default)
                 return compress(src, src_size, dst, dst_cap);

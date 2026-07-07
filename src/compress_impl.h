@@ -55,14 +55,11 @@ namespace misa77
 
     // Returns number of bytes written to `dst`, and 0 on failure.
     // `isa_lib` is ISA-dependent.
-    // This must be always_inline, as we're relying on the assumption that the entire body will
-    // fold into specializations (like compress_avx2).
     template <class isa_lib>
-    [[gnu::always_inline]]
-    inline uint64_t compress_impl(const uint8_t* __restrict src,
-                                  uint64_t src_size,
-                                  uint8_t* __restrict dst,
-                                  uint64_t dst_cap)
+    uint64_t compress_impl(const uint8_t* __restrict src,
+                           uint64_t src_size,
+                           uint8_t* __restrict dst,
+                           uint64_t dst_cap)
     {
         if (compress_bound(src_size) > dst_cap)
             return 0;
