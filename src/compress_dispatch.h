@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "misa77/misa77.h"
+
 #include <cstdint>
 
 namespace misa77
@@ -14,13 +16,16 @@ namespace misa77
     uint64_t compress_avx2(const uint8_t* __restrict src,
                            uint64_t src_size,
                            uint8_t* __restrict dst,
-                           uint64_t dst_cap);
+                           uint64_t dst_cap,
+                           config cfg);
     uint64_t compress_sse2(const uint8_t* __restrict src,
                            uint64_t src_size,
                            uint8_t* __restrict dst,
-                           uint64_t dst_cap);
+                           uint64_t dst_cap,
+                           config cfg);
     uint64_t compress_portable(const uint8_t* __restrict src,
                                uint64_t src_size,
                                uint8_t* __restrict dst,
-                               uint64_t dst_cap);
+                               uint64_t dst_cap,
+                               config cfg);
 } // namespace misa77

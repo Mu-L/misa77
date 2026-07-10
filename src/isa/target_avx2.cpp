@@ -7,7 +7,8 @@
 // AVX2 support.
 
 #include "compress_dispatch.h"
-#include "compress_impl.h"
+#include "compressor_zoo/default_compress_impl.h"
+#include "compressor_zoo/loose_compress_impl.h"
 #include "decompress_dispatch.h"
 #include "decompress_impl.h"
 #include "isa/lib_avx2.h"
@@ -19,9 +20,14 @@ namespace misa77
     uint64_t compress_avx2(const uint8_t* __restrict src,
                            uint64_t src_size,
                            uint8_t* __restrict dst,
-                           uint64_t dst_cap)
+                           uint64_t dst_cap,
+                           config cfg)
     {
-        return compress_impl<lib_avx2>(src, src_size, dst, dst_cap);
+        if (cfg.level == 0)
+            return loose_compress_impl<lib_avx2>(src, src_size, dst, dst_cap);
+        else if (cfg.level == 1)
+            return default_compress_impl<lib_avx2>(src, src_size, dst, dst_cap);
+        return 0;
     }
 
     uint64_t decompress_avx2(const uint8_t* __restrict src,

@@ -26,14 +26,15 @@ namespace misa77
     uint64_t compress(const uint8_t* __restrict src,
                       uint64_t src_size,
                       uint8_t* __restrict dst,
-                      uint64_t dst_cap)
+                      uint64_t dst_cap,
+                      config cfg)
     {
 #if defined(__x86_64__)
         if (__builtin_cpu_supports("avx2"))
-            return compress_avx2(src, src_size, dst, dst_cap);
-        return compress_sse2(src, src_size, dst, dst_cap);
+            return compress_avx2(src, src_size, dst, dst_cap, cfg);
+        return compress_sse2(src, src_size, dst, dst_cap, cfg);
 #else
-        return compress_portable(src, src_size, dst, dst_cap);
+        return compress_portable(src, src_size, dst, dst_cap, cfg);
 #endif
     }
 } // namespace misa77

@@ -11,17 +11,32 @@ namespace misa77
     // `1e17`
     inline constexpr uint64_t max_src_size = 100'000'000'000'000'000;
 
+    class config
+    {
+    public:
+        // Only integers in [0, max_level] are valid levels
+        static constexpr uint8_t max_level = 1;
+        static constexpr uint8_t default_level = 1;
+        static_assert(default_level <= max_level);
+
+        uint8_t level;
+        config() : level(default_level) {}
+        explicit config(uint8_t l) : level(l) {}
+    };
+
     // Upper-bound on compressed size (in bytes) for any input of size `src_size` bytes.
     // Use to size destination buffer.
     // PRECONDITION: `src_size <= max_src_size`
     uint64_t compress_bound(uint64_t src_size);
 
     // Returns number of bytes written to `dst`, and 0 on failure.
-    // PRECONDITION: `src_size <= max_src_size`
+    // `cfg.level` selects the compressor to be used (all levels conform to the same format).
+    // PRECONDITION: `src_size <= max_src_size` and `0 <= cfg.level <= config::max_level`
     uint64_t compress(const uint8_t* __restrict src,
                       uint64_t src_size,
                       uint8_t* __restrict dst,
-                      uint64_t dst_cap);
+                      uint64_t dst_cap,
+                      config cfg = config());
 
     // Returns the exact size (in bytes) of the file that the given compressed file will be
     // decompressed to.

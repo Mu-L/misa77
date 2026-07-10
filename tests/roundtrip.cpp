@@ -128,14 +128,23 @@ namespace
         return true;
     }
 
-    // Default codec: the runtime-dispatched compress().
+    // The runtime-dispatched compress(), swept over every supported level so new
+    // zoo modes are covered without touching the call sites below.
     bool run_one(const std::vector<uint8_t>& input, const char* name, Stats& stats)
     {
-        return run_one_with(input,
-                            name,
-                            stats,
-                            [](const uint8_t* s, uint64_t ss, uint8_t* d, uint64_t dc)
-                            { return misa77::compress(s, ss, d, dc); });
+        bool ok = true;
+        for (uint8_t level = 0; level <= misa77::config::max_level; ++level)
+        {
+            char lname[96];
+            std::snprintf(lname, sizeof(lname), "%s@L%u", name, unsigned(level));
+            ok = run_one_with(input,
+                              lname,
+                              stats,
+                              [level](const uint8_t* s, uint64_t ss, uint8_t* d, uint64_t dc)
+                              { return misa77::compress(s, ss, d, dc, misa77::config(level)); }) and
+                 ok;
+        }
+        return ok;
     }
 
     // Experimental tuned codec: compress with compress_tuned(param), decompress

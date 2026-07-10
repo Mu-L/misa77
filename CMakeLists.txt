@@ -23,7 +23,8 @@ add_library(misa77
     src/util.h
     src/decompress_impl.h
     src/decompress_dispatch.h
-    src/compress_impl.h
+    src/compressor_zoo/default_compress_impl.h
+    src/compressor_zoo/loose_compress_impl.h
     src/compress_dispatch.h
     src/compress.cpp
     src/decompress.cpp
