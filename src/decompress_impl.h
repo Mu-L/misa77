@@ -21,7 +21,7 @@ namespace misa77
                              uint8_t* __restrict dst,
                              uint64_t dst_cap)
     {
-        const uint64_t original_size = decompressed_size(src);
+        const uint64_t original_size = loadu8(src);
 
         if (dst_cap < original_size)
             return 0;
@@ -34,87 +34,71 @@ namespace misa77
             return original_size;
         }
 
-        // Left and right pointers in the source buffer
-        uint64_t lpos = 0, rpos = src_size;
+        const uint64_t literal_suffix_cnt = loadu8(src + 8);
+        const uint8_t* control = src + 16;
+        const uint8_t* literals = src + src_size - literal_suffix_cnt;
+        uint8_t* out = dst;
 
-        // Read the original size
-        lpos += 8;
-
-        // Size of literal suffix
-        uint64_t literal_suffix_cnt = loadu8(src + lpos);
-        lpos += 8;
-        rpos -= literal_suffix_cnt;
-
-        // Position in the destination buffer
-        uint64_t dpos = 0;
-
-        // Initial loop with safe overwrites in the destination buffer and safe overreads from
-        // source buffer
-        while (lpos < rpos)
+        // Token loop with safe overwrites in the destination buffer and safe overreads from source.
+        while (control < literals)
         {
             // Overread is safe here
-            uint8_t token = src[lpos];
+            uint8_t token = control[0];
             uint64_t lit_len = token >> 5;
             uint64_t match_len = (token & uint8_t(0x1F)) + min_match_len - 1;
 
-            uint16_t dis_small = loadu2(src + lpos + 1);
+            uint16_t dis_small = loadu2(control + 1);
             uint32_t dis = dis_small + hashtab_lag + 1;
 
-            lpos += 3;
+            control += 3;
 
             if (lit_len == 7) [[unlikely]]
             {
-                uint64_t pot_add = src[lpos];
+                uint64_t pot_add = *control;
                 lit_len += pot_add;
-                lpos++;
+                ++control;
 
                 constexpr uint64_t block = 255;
                 if (pot_add == block) [[unlikely]]
                 {
-                    while (src[lpos] == block) [[unlikely]]
-                        lit_len += block, ++lpos;
-                    lit_len += src[lpos], ++lpos;
+                    while (*control == block) [[unlikely]]
+                        lit_len += block, ++control;
+                    lit_len += *control, ++control;
                 }
             }
 
+            literals -= lit_len;
             if (lit_len > dec_literal_copy) [[unlikely]]
             {
-                rpos -= lit_len;
-
-                isa_lib::copy32(dst + dpos, src + rpos);
+                isa_lib::copy32(out, literals);
 
                 if (lit_len > vector_width) [[unlikely]]
                 {
-                    memcpy(dst + (dpos + vector_width),
-                           src + (rpos + vector_width),
-                           lit_len - vector_width);
+                    memcpy(out + vector_width, literals + vector_width, lit_len - vector_width);
                 }
             }
             else
             {
                 // Unconditional copy, safe because we have `dec_literal_copy` bytes of
                 // breathing room at the end in src and dst due to `literal_suffix`
-                rpos -= lit_len;
-                memcpy(dst + dpos, src + rpos, dec_literal_copy);
+                memcpy(out, literals, dec_literal_copy);
             }
-            dpos += lit_len;
+            out += lit_len;
 
             // When we enter cyccpy, we're guaranteed to have `literal_suffix` >= vector_width
             // bytes of breathing room in the destination buffer as the last `literal_suffix`
             // bytes are literals
-            isa_lib::cyccpy(dst + (dpos - dis), dis);
-            dpos += match_len;
+            isa_lib::cyccpy(out - dis, dis);
+            out += match_len;
         }
 
-        if (dpos != original_size - literal_suffix_cnt)
+        if (uint64_t(out - dst) != original_size - literal_suffix_cnt)
             return 0;
 
         // Literal suffix at the end
-        memcpy(dst + (original_size - literal_suffix_cnt),
-               src + (src_size - literal_suffix_cnt),
-               literal_suffix_cnt);
-        dpos += literal_suffix_cnt;
+        memcpy(out, src + src_size - literal_suffix_cnt, literal_suffix_cnt);
+        out += literal_suffix_cnt;
 
-        return dpos;
+        return uint64_t(out - dst);
     }
 } // namespace misa77
