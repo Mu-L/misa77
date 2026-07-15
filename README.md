@@ -20,10 +20,6 @@ misa77 also has two compression effort levels as of v0.2.0:
 - level 0: offers better decode throughput, slightly worse ratio, similar encode throughput
 - level 1 (default): offers slightly worse decode throughput, better ratio, similar encode throughput
 
-## Documentation
-
-The underlying stream format (used by the library functions) and the container format for `.misa77` files (produced by the CLI) can be found in [`docs/`](docs/).
-
 ## Benchmarks
 
 Detailed results are listed ahead, but here's a terse summary:
@@ -126,6 +122,39 @@ This produces the `misa` CLI at `build/misa`. For a binary tuned to the exact ma
 ctest --test-dir build
 ```
 
+## Library Usage
+
+The build produces a static library (CMake target `misa77`) with a small C++ API in `misa77/misa77.h`. The easiest integration is a git submodule (or CMake `FetchContent`) plus:
+
+```cmake
+add_subdirectory(misa77)
+target_link_libraries(your_app PRIVATE misa77)
+```
+
+Sample usage:
+
+```cpp
+#include <misa77/misa77.h>
+#include <vector>
+
+// compress (pick a level with misa77::config(0/1); default is 1), returns 0 on failure
+std::vector<uint8_t> compressed(misa77::compress_bound(input_size));
+uint64_t csize = misa77::compress(input, input_size, compressed.data(), compressed.size());
+compressed.resize(csize);
+
+// decompress, returns original_size on success
+uint64_t original_size = misa77::decompressed_size(compressed.data());
+std::vector<uint8_t> output(misa77::decompressed_buffer_bound(original_size));
+uint64_t written = misa77::decompress(compressed.data(), csize, output.data(), output.size());
+```
+
+Two things to keep in mind:
+
+- You must size the destination buffers with `compress_bound` / `decompressed_buffer_bound`.
+- As of v0.2.x, `decompress` assumes that the input is valid (see [Status](#status)). An input-safe decoder will be added in v0.3.0.
+
+The experimental modes are declared in `misa77/experimental.h`, with usage documented in comments (these keep changing frequently so I don't wanna "formally" document them here just yet).
+
 ## CLI Usage
 
 `misa` is a single, dependency-free binary with three file-based subcommands. It operates on single files only (there's no directory or pipe support, so `tar` first if you need those).
@@ -156,6 +185,11 @@ misa decompress enwik8.misa77            # back to enwik8
 misa suggest --tune tight data.bin       # -> data.misap
 misa compress --params data.misap data.bin
 ```
+
+## Documentation
+
+The underlying stream format (used by the library functions) and the container format for `.misa77` files (produced by the CLI) can be found in [`docs/`](docs/).
+
 
 ## Status
 
