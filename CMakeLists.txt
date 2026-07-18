@@ -21,7 +21,8 @@ set(MISA77_MARCH "${MISA77_MARCH_DEFAULT}" CACHE STRING "-march for the misa77 d
 add_library(misa77
     src/format.h
     src/util.h
-    src/decompress_impl.h
+    src/decompressor_zoo/unsafe_decompress_impl.h
+    src/decompressor_zoo/safe_decompress_impl.h
     src/decompress_dispatch.h
     src/compressor_zoo/default_compress_impl.h
     src/compressor_zoo/loose_compress_impl.h
@@ -30,6 +31,7 @@ add_library(misa77
     src/decompress.cpp
     src/isa/lib_avx2.h
     src/isa/lib_sse2.h
+    src/isa/lib_neon.h
     src/isa/lib_portable.h
     src/isa/target_portable.cpp
     src/experimental/params.h
@@ -64,6 +66,12 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
         src/isa/target_sse2.cpp src/isa/target_portable.cpp
         src/experimental/isa/etarget_sse2.cpp src/experimental/isa/etarget_portable.cpp
         PROPERTIES COMPILE_OPTIONS "-march=x86-64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+    target_sources(misa77 PRIVATE src/isa/target_neon.cpp)
+    set_source_files_properties(
+        src/isa/target_neon.cpp src/isa/target_portable.cpp
+        src/experimental/isa/etarget_portable.cpp
+        PROPERTIES COMPILE_OPTIONS "-march=armv8-a")
 endif()
 
 add_executable(misa77_cli app/misa77_cli.cpp)

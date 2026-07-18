@@ -8,7 +8,8 @@
 #include "compressor_zoo/default_compress_impl.h"
 #include "compressor_zoo/loose_compress_impl.h"
 #include "decompress_dispatch.h"
-#include "decompress_impl.h"
+#include "decompressor_zoo/safe_decompress_impl.h"
+#include "decompressor_zoo/unsafe_decompress_impl.h"
 #include "isa/lib_sse2.h"
 
 #include <cstdint>
@@ -31,8 +32,12 @@ namespace misa77
     uint64_t decompress_sse2(const uint8_t* __restrict src,
                              uint64_t src_size,
                              uint8_t* __restrict dst,
-                             uint64_t dst_cap)
+                             uint64_t dst_cap,
+                             dconfig dcfg)
     {
-        return decompress_impl<lib_sse2>(src, src_size, dst, dst_cap);
+        if (dcfg.safe)
+            return safe_decompress_impl<lib_sse2>(src, src_size, dst, dst_cap);
+        return unsafe_decompress_impl<lib_sse2>(src, src_size, dst, dst_cap);
     }
+
 } // namespace misa77

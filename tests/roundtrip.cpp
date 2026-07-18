@@ -117,6 +117,33 @@ namespace
             return false;
         }
 
+        // --- Safe decoder: same stream, same bytes, through the checked path ---
+        {
+            std::vector<uint8_t> outs(dcap + kMargin, kCanary);
+            const uint64_t rss = misa77::decompress(
+                compressed.data(), csz, outs.data(), dcap, misa77::dconfig(true));
+            if (rss != input.size())
+            {
+                std::fprintf(stderr,
+                             "[%s] FAIL: safe roundtrip wrong size (got %llu, want %zu)\n",
+                             name,
+                             static_cast<unsigned long long>(rss),
+                             input.size());
+                return false;
+            }
+            if (!canary_intact(outs, dcap))
+            {
+                std::fprintf(
+                    stderr, "[%s] FAIL: safe decode wrote past the exact-size dst\n", name);
+                return false;
+            }
+            if (input.size() > 0 && std::memcmp(outs.data(), input.data(), input.size()) != 0)
+            {
+                std::fprintf(stderr, "[%s] FAIL: safe decode content mismatch\n", name);
+                return false;
+            }
+        }
+
         const double ratio =
             input.size() > 0 ? static_cast<double>(csz) / static_cast<double>(input.size()) : 0.0;
         std::printf("[%s] OK  %zu -> %llu bytes  (ratio %.3f)\n",
@@ -395,6 +422,101 @@ int main(int argc, char** argv)
                 std::snprintf(buf, sizeof(buf), "tuned[%s]/%s", m.name, c.name);
                 run_one_tuned(c.data, buf, stats, m.p);
             }
+    }
+
+    // --- Safe decoder: inputs it MUST reject (return 0, no OOB write) -------
+    // The heavy adversarial fuzzing lives outside ctest; these are the
+    // deterministic guard cases whose rejection the decoder guarantees by spec.
+    {
+        auto expect_reject = [&stats](const char* name, const uint8_t* s, uint64_t n, uint64_t cap)
+        {
+            ++stats.total;
+            std::vector<uint8_t> d(cap + kMargin, kCanary);
+            const uint64_t r = misa77::decompress(s, n, d.data(), cap, misa77::dconfig(true));
+            if (r != 0)
+            {
+                std::fprintf(stderr,
+                             "[safe-reject/%s] FAIL: accepted malformed input (returned %llu)\n",
+                             name,
+                             static_cast<unsigned long long>(r));
+                return;
+            }
+            if (!canary_intact(d, cap))
+            {
+                std::fprintf(stderr, "[safe-reject/%s] FAIL: wrote past dst_cap\n", name);
+                return;
+            }
+            std::printf("[safe-reject/%s] OK\n", name);
+            ++stats.passed;
+        };
+
+        const std::vector<uint8_t> raw = lz_friendly(300'000, 7);
+        std::vector<uint8_t> cs(misa77::compress_bound(raw.size()));
+        const uint64_t csz = misa77::compress(raw.data(), raw.size(), cs.data(), cs.size());
+        cs.resize(csz);
+
+        expect_reject("empty", cs.data(), 0, raw.size());
+        expect_reject("7-byte-header", cs.data(), 7, raw.size());
+        expect_reject("dst-too-small", cs.data(), csz, raw.size() - 1);
+
+        // Header lies, patched in place and restored.
+        auto with_field = [&](int field, uint64_t v, const char* name)
+        {
+            uint8_t saved[8];
+            std::memcpy(saved, cs.data() + 8 * field, 8);
+            std::memcpy(cs.data() + 8 * field, &v, 8);
+            expect_reject(name, cs.data(), csz, raw.size());
+            std::memcpy(cs.data() + 8 * field, saved, 8);
+        };
+        with_field(0, ~uint64_t(0), "size=2^64-1");
+        with_field(1, 0, "suffix=0");
+        with_field(1, csz, "suffix=whole-stream");
+        with_field(1, ~uint64_t(0), "suffix=2^64-1");
+
+        // Match code 31 decodes to match_len 34 > max_match_len (never emitted by any
+        // compressor), so a token can end exactly at the loop limit and overshoot the
+        // output cursor past one-past-the-end of dst. The decoder must reject the
+        // stream (exit equality check) with all writes in-bounds and the overshoot
+        // kept in integer arithmetic. Hand-crafted counterexample (2026-07-18).
+        {
+            std::vector<uint8_t> evil(89, 0);
+            const uint64_t claimed_size = 100, suffix_cnt = 32;
+            std::memcpy(evil.data(), &claimed_size, 8);
+            std::memcpy(evil.data() + 8, &suffix_cnt, 8);
+            evil[16] = 0xFF; // token 1: lit_len field 7, match code 31
+            evil[19] = 26;   // extras byte: lit_len = 7 + 26 = 33
+            evil[20] = 0x3F; // token 2: lit_len 1, match code 31
+            expect_reject("match-code-31", evil.data(), evil.size(), claimed_size);
+        }
+
+        // Mutation smoke: single-byte corruptions must never crash or write out
+        // of bounds; decoding to garbage or rejecting are both acceptable.
+        {
+            ++stats.total;
+            bool ok = true;
+            std::vector<uint8_t> d(raw.size() + kMargin, kCanary);
+            for (uint64_t pos = 16; pos < csz && ok; pos += csz / 256 + 1)
+            {
+                cs[pos] ^= 0x5A;
+                const uint64_t r =
+                    misa77::decompress(cs.data(), csz, d.data(), raw.size(), misa77::dconfig(true));
+                if (r > raw.size() || !canary_intact(d, raw.size()))
+                {
+                    std::fprintf(stderr,
+                                 "[safe-mutation] FAIL at flip offset %llu (returned %llu)\n",
+                                 static_cast<unsigned long long>(pos),
+                                 static_cast<unsigned long long>(r));
+                    ok = false;
+                }
+                cs[pos] ^= 0x5A;
+                std::fill(d.begin(), d.end(), kCanary);
+            }
+            if (ok)
+            {
+                std::printf("[safe-mutation] OK\n");
+                ++stats.passed;
+            }
+        }
     }
 
     // --- Any file paths passed on the command line (e.g. corpora) -----------

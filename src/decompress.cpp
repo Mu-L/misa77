@@ -40,14 +40,18 @@ namespace misa77
     uint64_t decompress(const uint8_t* __restrict src,
                         uint64_t src_size,
                         uint8_t* __restrict dst,
-                        uint64_t dst_cap)
+                        uint64_t dst_cap,
+                        dconfig dcfg)
     {
 #if defined(__x86_64__)
         if (__builtin_cpu_supports("avx2"))
-            return decompress_avx2(src, src_size, dst, dst_cap);
-        return decompress_sse2(src, src_size, dst, dst_cap);
+            return decompress_avx2(src, src_size, dst, dst_cap, dcfg);
+        return decompress_sse2(src, src_size, dst, dst_cap, dcfg);
+#elif defined(__aarch64__)
+        // NEON is guaranteed on Aarch64
+        return decompress_neon(src, src_size, dst, dst_cap, dcfg);
 #else
-        return decompress_portable(src, src_size, dst, dst_cap);
+        return decompress_portable(src, src_size, dst, dst_cap, dcfg);
 #endif
     }
 

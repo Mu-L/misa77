@@ -1,24 +1,24 @@
-# misa77 (0.2.0)
+# misa77 (0.3.0)
 
 misa77 is an LZ-based codec that targets the write-once, read-many niche. In particular, it aims to satisfy the following criteria:
 
 - Extremely high decompression throughput (single-threaded).
-- Modest compression ratios (it has no entropy backend, so one can obviously not compare it to something like zstd, but LZ4 at high effort levels is a good reference point).
+- Modest compression ratios (LZ4 at high effort levels is a good reference point).
 - Constant memory use, regardless of input size (<= 5 MB across all compression modes, and 0 MB for decompression).
 
 Slow compression is the obvious tradeoff that one makes to achieve the above.
 
-In addition, misa77 has a somewhat synergizing tendency to decompress highly compressed files faster, leading to the following results:
+In addition, misa77 has a somewhat synergizing tendency to decompress highly compressed files faster. This makes high-effort compression particularly attractive for misa77, and inspires some experimental compression modes (refer to [src/experimental/](src/experimental/)) that aim to spend more effort at compression time to produce a compressed stream that is friendlier to the microarchitectures of most CPUs when decompressing said streams.
 
-- It offers particularly high decompression throughput on highly compressible files.
-- Even for moderately compressible files, spending more effort during compression to get a more compressed result leads to better decompression throughput (alongside the natural advantage of better ratios).
-
-This makes high-effort compression particularly attractive for misa77, and inspires some experimental compression modes (refer to [src/experimental/](src/experimental/)) that aim to spend more effort at compression time to produce a compressed stream that is friendlier to the microarchitectures of most CPUs when decompressing said streams.
-
-misa77 also has two compression effort levels as of v0.2.0:
+misa77 has two compression effort levels as of v0.3.0:
 
 - level 0: offers better decode throughput, slightly worse ratio, similar encode throughput
 - level 1 (default): offers slightly worse decode throughput, better ratio, similar encode throughput
+
+There are two decompressor modes:
+
+- unsafe: passing invalid input to this mode is UB.
+- safe: guaranteed to exit gracefully (ie. provably terminate, and not access out-of-bounds memory or engage in any other UB) in the case of corrupt/malicious input, is 2-4% slower than unsafe.
 
 ## Benchmarks
 
@@ -27,57 +27,65 @@ Detailed results are listed ahead, but here's a terse summary:
 - misa77 lies on the pareto frontier for decompression throughput vs compression ratio on most shapes of data.
 - It very frequently decompresses faster even when competitors have a significantly worse ratio.
 - It is quite slow at compression.
+- Performance is a bit sensitive to codegen, but even with the worst possible codegen I saw in my testing, misa77 was significantly faster than other codecs.
 
-Cross-Platform results for v0.1.0 (across Intel x86-64, AMD x86-64, ARM64) can be found [here](misc/lzbench-results-archive/0.1.0/cross_platform.md). Note that these are likely outdated at the time of you reading this.
+Let's first see some cross-platform results for the [Silesia Corpus](https://sun.aei.polsl.pl//~sdeor/corpus/silesia.zip).
 
-Some detailed results for Intel x86-64 follow.
+Note:
 
-Setup:
+1. "Ratio" ahead is equal to `((compressed size)/(original)) * 100` (so lower is better).
+2. The benchmarking harness is a public fork of lzbench, and can be accessed [here](https://github.com/welcome-to-the-sunny-side/lzbench/tree/add-misa77-0.3.0).
+3. In the tables ahead, rows are sorted by decompression speed.
+
+---
+
+### Intel x86-64
+
+Details:
 
 - CPU: Intel(R) Core(TM) i7-14650HX (@2.2 GHz) (Intel Turbo disabled).
 - Single threaded, pinned to a single performance core.
 - CPU governor set to `performance`.
-- The benchmarking harness is a public fork of lzbench, and can be accessed [here](https://github.com/welcome-to-the-sunny-side/lzbench).
+
+| Compressor name       | Compression | Decompress. |  Ratio | Filename    |
+| --------------------- | ----------- | ----------- | ------ | ----------- |
+| misa77 0.3.0 -0       |   54.1 MB/s |   5363 MB/s |  42.64 | silesia.tar |
+| misa77 0.3.0 safe -0  |   54.1 MB/s |   5205 MB/s |  42.64 | silesia.tar |
+| misa77 0.3.0 -1       |   51.2 MB/s |   4372 MB/s |  39.65 | silesia.tar |
+| misa77 0.3.0 safe -1  |   51.2 MB/s |   4235 MB/s |  39.65 | silesia.tar |
+| zxc 0.13.1 -3         |    116 MB/s |   2830 MB/s |  45.46 | silesia.tar |
+| zxc 0.13.1 -4         |   81.0 MB/s |   2721 MB/s |  42.63 | silesia.tar |
+| lzsse8fast 2019-04-18 |    183 MB/s |   2668 MB/s |  44.80 | silesia.tar |
+| zxc 0.13.1 -5         |   48.4 MB/s |   2599 MB/s |  40.25 | silesia.tar |
+| lzsse4fast 2019-04-18 |    187 MB/s |   2538 MB/s |  45.26 | silesia.tar |
+| lz4hc 1.10.0 -12      |   7.31 MB/s |   2533 MB/s |  36.45 | silesia.tar |
+| lz4 1.10.0            |    371 MB/s |   2510 MB/s |  47.59 | silesia.tar |
+| lzav 5.11 -1          |    297 MB/s |   1725 MB/s |  39.94 | silesia.tar |
+| zstd 1.5.7 -1         |    296 MB/s |    903 MB/s |  34.54 | silesia.tar |
+| snappy 1.2.2          |    375 MB/s |    858 MB/s |  47.89 | silesia.tar |
 
 ---
 
-### Results for the [Silesia Corpus](https://sun.aei.polsl.pl//~sdeor/corpus/silesia.zip).
+### ARM64 (Apple Silicon)
 
-misa77 rows first, then competitors are sorted by decompression speed.
+Details: 
 
-| Compressor name          | Compression | Decompress. |  Ratio | Filename    |
-| ------------------------ | ----------- | ----------- | ------ | ----------- |
-| misa77 0.2.0 -0          |   54.5 MB/s |   5219 MB/s |  42.64 | silesia.tar |
-| misa77 0.2.0 -1          |   51.2 MB/s |   4274 MB/s |  39.65 | silesia.tar |
-| zxc 0.12.0 -3            |    115 MB/s |   2841 MB/s |  45.46 | silesia.tar |
-| zxc 0.12.0 -4            |   80.8 MB/s |   2726 MB/s |  42.63 | silesia.tar |
-| lzsse8fast 2019-04-18    |    183 MB/s |   2661 MB/s |  44.80 | silesia.tar |
-| zxc 0.12.0 -5            |   48.6 MB/s |   2599 MB/s |  40.25 | silesia.tar |
-| lz4hc 1.10.0 -12         |   7.31 MB/s |   2531 MB/s |  36.45 | silesia.tar |
-| lzsse4fast 2019-04-18    |    186 MB/s |   2522 MB/s |  45.26 | silesia.tar |
-| lz4 1.10.0               |    371 MB/s |   2505 MB/s |  47.59 | silesia.tar |
-| lizard 2.1 -10           |    320 MB/s |   2452 MB/s |  48.79 | silesia.tar |
-| zstd 1.5.7 -1            |    297 MB/s |    901 MB/s |  34.54 | silesia.tar |
-| snappy 1.2.2             |    375 MB/s |    855 MB/s |  47.89 | silesia.tar |
+- CPU: Apple M3
 
----
-
-### Results for [enwik8](https://mattmahoney.net/dc/textdata.html).
-
-| Compressor name          | Compression | Decompress. |  Ratio | Filename |
-| ------------------------ | ----------- | ----------- | ------ | -------- |
-| misa77 0.2.0 -0          |   38.7 MB/s |   4802 MB/s |  48.59 | enwik8   |
-| misa77 0.2.0 -1          |   40.6 MB/s |   4134 MB/s |  44.05 | enwik8   |
-| zxc 0.12.0 -3            |   70.1 MB/s |   2674 MB/s |  52.05 | enwik8   |
-| zxc 0.12.0 -5            |   38.7 MB/s |   2627 MB/s |  46.85 | enwik8   |
-| zxc 0.12.0 -4            |   52.7 MB/s |   2593 MB/s |  48.60 | enwik8   |
-| lzsse4fast 2019-04-18    |    141 MB/s |   2581 MB/s |  47.11 | enwik8   |
-| lzsse8fast 2019-04-18    |    135 MB/s |   2553 MB/s |  47.25 | enwik8   |
-| lizard 2.1 -10           |    240 MB/s |   2462 MB/s |  57.31 | enwik8   |
-| lz4 1.10.0               |    276 MB/s |   2355 MB/s |  57.26 | enwik8   |
-| lz4hc 1.10.0 -12         |   9.89 MB/s |   2167 MB/s |  41.91 | enwik8   |
-| zstd 1.5.7 -1            |    225 MB/s |    831 MB/s |  40.66 | enwik8   |
-| snappy 1.2.2             |    240 MB/s |    568 MB/s |  55.93 | enwik8   |
+| Compressor name       | Compression | Decompress. |  Ratio | Filename    |
+| --------------------- | ----------- | ----------- | ------ | ----------- |
+| misa77 0.3.0 safe -0  |    133 MB/s |  12561 MB/s |  42.64 | silesia.tar |
+| misa77 0.3.0 -0       |    134 MB/s |  12537 MB/s |  42.64 | silesia.tar |
+| misa77 0.3.0 -1       |    122 MB/s |  10225 MB/s |  39.65 | silesia.tar |
+| misa77 0.3.0 safe -1  |    125 MB/s |  10057 MB/s |  39.65 | silesia.tar |
+| zxc 0.13.1 -3         |    271 MB/s |   8011 MB/s |  45.77 | silesia.tar |
+| zxc 0.13.1 -4         |    182 MB/s |   7640 MB/s |  43.20 | silesia.tar |
+| zxc 0.13.1 -5         |    111 MB/s |   7137 MB/s |  40.30 | silesia.tar |
+| lz4 1.10.0            |    919 MB/s |   5311 MB/s |  47.59 | silesia.tar |
+| lz4hc 1.10.0 -12      |   16.7 MB/s |   4892 MB/s |  36.45 | silesia.tar |
+| lzav 5.11 -1          |    740 MB/s |   4358 MB/s |  39.93 | silesia.tar |
+| snappy 1.2.2          |    969 MB/s |   3445 MB/s |  47.91 | silesia.tar |
+| zstd 1.5.7 -1         |    717 MB/s |   1619 MB/s |  34.54 | silesia.tar |
 
 ---
 
@@ -85,29 +93,36 @@ As misa77's performance is quite "spiky" (depending on the shape of the data bei
 
 Note: 
 
-- The visuals that follow are derived from the benchmark results at [misc/lzbench-results-archive/0.2.0/intel.txt](misc/lzbench-results-archive/0.2.0/intel.txt)
+- The visuals that follow are derived from the benchmark results at [misc/lzbench-results-archive/0.3.0/intel.txt](misc/lzbench-results-archive/0.3.0/intel.txt)
 - These results are with the same x86-64 (Intel) setup mentioned previously.
 
 ### Decode speed relative to lz4
 
-At level 0, misa77 decodes faster than lz4 on all 12 files (some by huge margins). All other levels decode faster on 11/12 files. The exception is `x-ray`, which is highly incompressible (lz4 has a ratio of nearly 1.0 on this file and essentially devolves to a `memcpy`).
+At level 0, misa77 decodes faster than lz4 on all 12 files (some by huge margins). Level 1 decodes faster on 11/12 files. The exception is `x-ray`, which is highly incompressible (lz4 has a ratio of nearly 1.0 on this file and essentially devolves to a `memcpy`).
 
-![misa77 per-file decode speed vs lz4, all four modes, Silesia (Intel)](misc/lzbench-results-archive/0.2.0/speedup_vs_lz4.png)
+![misa77 per-file decode speed vs lz4, levels 0 and 1, Silesia (Intel)](misc/lzbench-results-archive/0.3.0/speedup_vs_lz4.png)
 
 ### Throughput vs ratio, against popular fast-decode codecs
 
-On the compressible files, misa77 sits on the decode-throughput/ratio Pareto frontier: it decodes fastest while ~matching or beating the ratio of the other fast-LZ codecs. `sao` and `x-ray` are exceptions due to the reasons stated before.
+On the compressible files, misa77 sits on the decode-throughput/ratio Pareto frontier: it decodes fastest while ~matching or beating the ratio of the other fast-LZ codecs. `x-ray` is an exception once again.
 
-![misa77 vs other codecs: per-file decode throughput vs ratio, Silesia (Intel)](misc/lzbench-results-archive/0.2.0/pareto_silesia.png)
+To spot misa77 in these graphs, just look for the circles near the top :)
+
+![misa77 vs other codecs: per-file decode throughput vs ratio, Silesia (Intel)](misc/lzbench-results-archive/0.3.0/pareto_silesia.png)
 
 ## Requirements
+
+For the library:
 
 - A C++20 compiler (both GCC and Clang are fine).
 - CMake >= 3.20.
 - A little-endian 64-bit system.
+
+For the CLI:
+
 - The `misa` CLI needs POSIX (Linux, macOS).
 
-Note: On x86-64, AVX2/SSE2 are selected at runtime. Other architectures use a portable path that has no explicit intrinsics, but is easily auto-vectorizable by compilers (and from my testing, does auto-vectorize on Apple ARM at the very least).
+Note: On x86-64, AVX2/SSE2 are selected at runtime. ARM has a NEON path.
 
 ## Building
 
@@ -145,13 +160,14 @@ compressed.resize(csize);
 // decompress, returns original_size on success
 uint64_t original_size = misa77::decompressed_size(compressed.data());
 std::vector<uint8_t> output(misa77::decompressed_buffer_bound(original_size));
-uint64_t written = misa77::decompress(compressed.data(), csize, output.data(), output.size());
+// decompress uses the unsafe decompressor by default, pass dconfig(true) to use the safe decompressor
+uint64_t written = misa77::decompress(compressed.data(), csize, output.data(), output.size(), misa77::dconfig(true));
 ```
 
 Two things to keep in mind:
 
 - You must size the destination buffers with `compress_bound` / `decompressed_buffer_bound`.
-- As of v0.2.x, `decompress` assumes that the input is valid (see [Status](#status)). An input-safe decoder will be added in v0.3.0.
+- You must pass `misa77::dconfig(true)` to `misa77::decompress` if you want the decompressor to exit gracefully on invalid input.
 
 The experimental modes are declared in `misa77/experimental.h`, with usage documented in comments (these keep changing frequently so I don't wanna "formally" document them here just yet).
 
@@ -190,12 +206,10 @@ misa compress --params data.misap data.bin
 
 The underlying stream format (used by the library functions) and the container format for `.misa77` files (produced by the CLI) can be found in [`docs/`](docs/).
 
-
 ## Status
 
 1. misa77's format may change unexpectedly as it's still v0.x.y. 
-2. The decoder assumes that the input is a valid misa77 stream. Invalid input is UB and I offer no guarantees for whatever misa77 does in this case.
-3. It's been through some local fuzzing but is not hardened, so treat it as experimental.
+2. It's been through local fuzzing with ASan/UBSan, broader hardening is ongoing.
 
 Note: misa77 has evolved out of a less polished endeavour to learn performance engineering, and its history can be found [in this archived repository](https://github.com/welcome-to-the-sunny-side/misa77-archive).
 

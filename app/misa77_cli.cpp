@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <charconv>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -40,7 +41,7 @@ namespace
     namespace fs = std::filesystem;
     using misa77::experimental::param;
 
-    constexpr std::string_view VERSION_STR = "0.2.0";
+    constexpr std::string_view VERSION_STR = MISA77_VERSION_STR;
 
     constexpr char MAGIC[4] = {'M', 'S', 'A', '7'};
     constexpr uint8_t VERSION = 1;
@@ -60,6 +61,51 @@ namespace
     {
         std::cerr << "misa: error: " << msg << '\n';
         std::exit(1);
+    }
+
+    // ---- --verbose reporting ----
+
+    using clk = std::chrono::steady_clock;
+
+    double seconds_since(clk::time_point t0)
+    {
+        return std::chrono::duration<double>(clk::now() - t0).count();
+    }
+
+    std::string with_commas(uint64_t v)
+    {
+        std::string s = std::to_string(v);
+        for (int i = int(s.size()) - 3; i > 0; i -= 3)
+            s.insert(size_t(i), ",");
+        return s;
+    }
+
+    std::string fixed(double v, int prec)
+    {
+        char buf[64];
+        std::snprintf(buf, sizeof buf, "%.*f", prec, v);
+        return buf;
+    }
+
+    // "misa: IN -> OUT" + sizes/ratio + codec/total timing. `speed_bytes` is the side the
+    // MB/s convention rates: input for compression, output for decompression. The codec
+    // line is separate from `total_s` because the wall is typically I/O-dominated.
+    void report(const std::string& in_path,
+                const std::string& out_path,
+                uint64_t in_bytes,
+                uint64_t out_bytes,
+                uint64_t speed_bytes,
+                double codec_s,
+                double total_s)
+    {
+        const double ratio = double(std::max(in_bytes, out_bytes)) /
+                             double(std::max<uint64_t>(std::min(in_bytes, out_bytes), 1));
+        const double mbps = double(speed_bytes) / 1e6 / std::max(codec_s, 1e-9);
+        std::cerr << "misa: " << in_path << " -> " << out_path << '\n'
+                  << "misa: " << with_commas(in_bytes) << " -> " << with_commas(out_bytes)
+                  << " bytes (ratio " << fixed(ratio, 3) << ")\n"
+                  << "misa: codec " << fixed(codec_s, 3) << " s (" << fixed(mbps, 1)
+                  << " MB/s), total " << fixed(total_s, 2) << " s\n";
     }
 
     // A memory-mapped file, with two uses:
@@ -238,15 +284,17 @@ namespace
         return 0;
     }
 
-    void compress_to(const uint8_t* in,
-                     uint64_t n,
-                     const std::string& outpath,
-                     bool force,
-                     Mode mode,
-                     misa77::config cfg,
-                     uint8_t option,
-                     uint64_t sample_bytes,
-                     const param* params_file)
+    // Returns the final output-file size; `codec_s` gets the library-call time alone.
+    uint64_t compress_to(const uint8_t* in,
+                         uint64_t n,
+                         const std::string& outpath,
+                         bool force,
+                         Mode mode,
+                         misa77::config cfg,
+                         uint8_t option,
+                         uint64_t sample_bytes,
+                         const param* params_file,
+                         double& codec_s)
     {
         ensure_overwritable(outpath, force);
         const uint64_t cap = HEADER_SIZE + misa77::compress_bound(n);
@@ -257,6 +305,7 @@ namespace
         buf[4] = VERSION;
         buf[5] = 0;
 
+        const auto t0 = clk::now();
         const uint64_t csz = run_codec(in,
                                        n,
                                        buf + HEADER_SIZE,
@@ -266,15 +315,19 @@ namespace
                                        option,
                                        sample_bytes,
                                        params_file);
+        codec_s = seconds_since(t0);
         if (csz == 0)
         {
             unlink(outpath.c_str());
             die("compression failed");
         }
         out.finish(HEADER_SIZE + csz);
+        return HEADER_SIZE + csz;
     }
 
-    void decompress_to(const uint8_t* in, uint64_t n, const std::string& outpath, bool force)
+    // Returns the decompressed size; `codec_s` gets the library-call time alone.
+    uint64_t decompress_to(
+        const uint8_t* in, uint64_t n, const std::string& outpath, bool force, double& codec_s)
     {
         if (n < HEADER_SIZE + 8)
             die("input is too small to be a misa77 file");
@@ -297,11 +350,15 @@ namespace
 
         ensure_overwritable(outpath, force);
         Mapping out(outpath, orig); // exact size, no finish() needed
-        if (misa77::decompress(payload, payload_size, out.data(), orig) != orig)
+        const auto t0 = clk::now();
+        const uint64_t r = misa77::decompress(payload, payload_size, out.data(), orig);
+        codec_s = seconds_since(t0);
+        if (r != orig)
         {
             unlink(outpath.c_str());
             die("decompression failed (corrupt or truncated stream)");
         }
+        return orig;
     }
 
     // ---- args ----
@@ -347,7 +404,8 @@ namespace
               "  misa help | misa version\n\n"
               "COMMON OPTIONS\n"
               "  -o, --output PATH   output path (default derived from FILE)\n"
-              "  -f, --force         overwrite the output without asking\n\n"
+              "  -f, --force         overwrite the output without asking\n"
+              "  -v, --verbose       report sizes, ratio and timing (to stderr)\n\n"
               "COMPRESS OPTIONS\n"
               "  -l, --level N       compression level, 0.."
            << unsigned(misa77::config::max_level) << "                  [default "
@@ -395,7 +453,7 @@ namespace
             die("unknown command '" + std::string(cmd) + "' (try: misa help)");
 
         std::string input, output, params_path;
-        bool have_input = false, have_output = false, force = false;
+        bool have_input = false, have_output = false, force = false, verbose = false;
         Mode mode = Mode::Fast;
         misa77::config cfg;
         bool have_level = false, have_tune = false;
@@ -416,6 +474,8 @@ namespace
                 output = next(s), have_output = true;
             else if (s == "-f" || s == "--force")
                 force = true;
+            else if (s == "-v" || s == "--verbose")
+                verbose = true;
             else if (s == "--adaptive")
                 mode = Mode::Adaptive, ++mode_flags;
             else if (s == "--yolo")
@@ -456,6 +516,7 @@ namespace
         if (have_tune && !(which == Cmd::Suggest || mode == Mode::Adaptive))
             die("--tune applies only to --adaptive and 'misa suggest'");
 
+        const auto t0 = clk::now();
         if (which == Cmd::Compress)
         {
             const Mapping in(input);
@@ -465,7 +526,19 @@ namespace
                 pf = read_params(params_path), pfp = &pf;
             const std::string outpath = have_output ? output : input + ".misa77";
             reject_self_overwrite(input, outpath);
-            compress_to(in.data(), in.size(), outpath, force, mode, cfg, option, sample_bytes, pfp);
+            double codec_s = 0;
+            const uint64_t out_bytes = compress_to(in.data(),
+                                                   in.size(),
+                                                   outpath,
+                                                   force,
+                                                   mode,
+                                                   cfg,
+                                                   option,
+                                                   sample_bytes,
+                                                   pfp,
+                                                   codec_s);
+            if (verbose)
+                report(input, outpath, in.size(), out_bytes, in.size(), codec_s, seconds_since(t0));
         }
         else if (which == Cmd::Decompress)
         {
@@ -478,18 +551,29 @@ namespace
             else
                 die("cannot derive an output name from '" + input + "'; use -o");
             reject_self_overwrite(input, outpath);
-            decompress_to(in.data(), in.size(), outpath, force);
+            double codec_s = 0;
+            const uint64_t out_bytes = decompress_to(in.data(), in.size(), outpath, force, codec_s);
+            if (verbose)
+                report(input, outpath, in.size(), out_bytes, out_bytes, codec_s, seconds_since(t0));
         }
         else // Suggest
         {
             const Mapping in(input);
             const uint64_t sample = std::min<uint64_t>(in.size(), sample_bytes);
             std::vector<uint8_t> scratch(misa77::compress_bound(sample));
+            const auto tc = clk::now();
             const param p = misa77::experimental::suggest_homogeneous(
                 in.data(), sample, scratch.data(), scratch.size(), option);
+            const double codec_s = seconds_since(tc);
             const std::string outpath = have_output ? output : input + ".misap";
             reject_self_overwrite(input, outpath);
             write_params(outpath, p, force);
+            if (verbose)
+                std::cerr << "misa: " << input << " -> " << outpath << '\n'
+                          << "misa: sampled " << with_commas(sample) << " bytes (tune "
+                          << (option == 0 ? "loose" : "tight") << ")\n"
+                          << "misa: codec " << fixed(codec_s, 3) << " s, total "
+                          << fixed(seconds_since(t0), 2) << " s\n";
         }
         return 0;
     }
