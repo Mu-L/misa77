@@ -23,9 +23,12 @@ add_library(misa77
     src/util.h
     src/decompressor_zoo/unsafe_decompress_impl.h
     src/decompressor_zoo/safe_decompress_impl.h
+    src/decompressor_zoo/heavy_unsafe_decompress_impl.h
+    src/decompressor_zoo/heavy_safe_decompress_impl.h
     src/decompress_dispatch.h
     src/compressor_zoo/default_compress_impl.h
     src/compressor_zoo/loose_compress_impl.h
+    src/compressor_zoo/heavy_compress_impl.h
     src/compress_dispatch.h
     src/compress.cpp
     src/decompress.cpp

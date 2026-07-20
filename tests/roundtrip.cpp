@@ -54,12 +54,13 @@ namespace
     bool run_one_with(const std::vector<uint8_t>& input,
                       const char* name,
                       Stats& stats,
+                      misa77::config cfg,
                       CompressFn&& do_compress)
     {
         ++stats.total;
 
         // --- Compress ---------------------------------------------------------
-        const uint64_t cbound = misa77::compress_bound(input.size());
+        const uint64_t cbound = misa77::compress_bound(input.size(), cfg);
         std::vector<uint8_t> compressed(cbound + kMargin, kCanary);
         const uint64_t csz = do_compress(input.data(), input.size(), compressed.data(), cbound);
         if (csz == 0)
@@ -118,6 +119,30 @@ namespace
         }
 
         // --- Safe decoder: same stream, same bytes, through the checked path ---
+        // Heavy streams have no safe decoder yet (deliberately deferred until the format
+        // freezes); the documented contract is that safe mode REJECTS them with 0. Pin that.
+        if (cfg.level >= misa77::config::heavy_lb)
+        {
+            std::vector<uint8_t> outs(dcap + kMargin, kCanary);
+            const uint64_t rss = misa77::decompress(
+                compressed.data(), csz, outs.data(), dcap, misa77::dconfig(true));
+            if (rss != 0)
+            {
+                std::fprintf(stderr,
+                             "[%s] FAIL: safe decode of a heavy stream returned %llu, want 0 "
+                             "(unsupported must reject)\n",
+                             name,
+                             static_cast<unsigned long long>(rss));
+                return false;
+            }
+            if (!canary_intact(outs, dcap) or outs != std::vector<uint8_t>(dcap + kMargin, kCanary))
+            {
+                std::fprintf(
+                    stderr, "[%s] FAIL: safe decode of a heavy stream wrote to dst\n", name);
+                return false;
+            }
+        }
+        else
         {
             std::vector<uint8_t> outs(dcap + kMargin, kCanary);
             const uint64_t rss = misa77::decompress(
@@ -167,6 +192,7 @@ namespace
             ok = run_one_with(input,
                               lname,
                               stats,
+                              misa77::config(level),
                               [level](const uint8_t* s, uint64_t ss, uint8_t* d, uint64_t dc)
                               { return misa77::compress(s, ss, d, dc, misa77::config(level)); }) and
                  ok;
@@ -181,9 +207,11 @@ namespace
                        Stats& stats,
                        misa77::experimental::param p)
     {
+        // Tuned/experimental codecs emit the light format; any light-level config bounds them.
         return run_one_with(input,
                             name,
                             stats,
+                            misa77::config(),
                             [&p](const uint8_t* s, uint64_t ss, uint8_t* d, uint64_t dc)
                             { return misa77::experimental::compress_tuned(s, ss, d, dc, p); });
     }
@@ -451,7 +479,7 @@ int main(int argc, char** argv)
         };
 
         const std::vector<uint8_t> raw = lz_friendly(300'000, 7);
-        std::vector<uint8_t> cs(misa77::compress_bound(raw.size()));
+        std::vector<uint8_t> cs(misa77::compress_bound(raw.size(), misa77::config()));
         const uint64_t csz = misa77::compress(raw.data(), raw.size(), cs.data(), cs.size());
         cs.resize(csz);
 

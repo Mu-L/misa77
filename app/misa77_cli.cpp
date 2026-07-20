@@ -14,6 +14,7 @@
 //   suggest     FILE          -> FILE.misap   (tuned params; feed back into compress via --params)
 //
 // Compressed format: [4 byte magic "MSA7"][1 byte version][1 byte flags][raw compression stream]
+// Container version 1 = light-format payload, 2 = heavy-format payload (see docs/cli-format.md).
 
 #include <algorithm>
 #include <cerrno>
@@ -44,7 +45,12 @@ namespace
     constexpr std::string_view VERSION_STR = MISA77_VERSION_STR;
 
     constexpr char MAGIC[4] = {'M', 'S', 'A', '7'};
-    constexpr uint8_t VERSION = 1;
+    // The container version is the compatibility boundary: v1 wraps a light-format
+    // payload (readable by every misa build), v2 wraps a heavy-format payload
+    // (0.4.0+). A build rejects versions it does not know, so older tools fail
+    // gracefully on newer files instead of feeding an unknown stream to their decoder.
+    constexpr uint8_t VERSION_LIGHT = 1;
+    constexpr uint8_t VERSION_HEAVY = 2;
     constexpr size_t HEADER_SIZE = 6; // 4 magic + 1 version + 1 flags
     constexpr uint32_t PARAM_SCHEMA =
         1; // .misap: schema + 8 param fields, space-separated on one line
@@ -297,12 +303,15 @@ namespace
                          double& codec_s)
     {
         ensure_overwritable(outpath, force);
-        const uint64_t cap = HEADER_SIZE + misa77::compress_bound(n);
+        const uint64_t cap = HEADER_SIZE + misa77::compress_bound(n, cfg);
         Mapping out(outpath, cap); // reserve the worst case, shrink to fit below
 
         uint8_t* buf = out.data();
         std::memcpy(buf, MAGIC, 4);
-        buf[4] = VERSION;
+        // Only plain `compress` can select a heavy level; every experimental mode
+        // emits the light format.
+        const bool heavy = mode == Mode::Fast and cfg.level >= misa77::config::heavy_lb;
+        buf[4] = heavy ? VERSION_HEAVY : VERSION_LIGHT;
         buf[5] = 0;
 
         const auto t0 = clk::now();
@@ -333,9 +342,10 @@ namespace
             die("input is too small to be a misa77 file");
         if (std::memcmp(in, MAGIC, 4) != 0)
             die("not a misa77 file (bad magic)");
-        if (in[4] != VERSION)
+        if (in[4] != VERSION_LIGHT and in[4] != VERSION_HEAVY)
             die("unsupported misa77 version " + std::to_string(int(in[4])) +
-                " (this build reads v" + std::to_string(int(VERSION)) + ")");
+                " (this build reads v" + std::to_string(int(VERSION_LIGHT)) + "-v" +
+                std::to_string(int(VERSION_HEAVY)) + ")");
         if (in[5] != 0)
             die("unsupported misa77 flags: " + std::to_string(int(in[5])));
 
@@ -411,7 +421,8 @@ namespace
            << unsigned(misa77::config::max_level) << "                  [default "
            << unsigned(misa77::config::default_level)
            << "]\n"
-              "                      0 = faster decompression, 1 = better ratio\n\n"
+              "                      0 = faster decompression, 1 = better ratio,\n"
+              "                      2 = best ratio (slow compression, good decode speed)\n\n"
               "EXPERIMENTAL COMPRESS MODES (use at most one; not combinable with --level)\n"
               "      --adaptive      autotune the codec for decode speed\n"
               "      --yolo          similar results to adaptive, lesser overhead\n"
@@ -560,7 +571,7 @@ namespace
         {
             const Mapping in(input);
             const uint64_t sample = std::min<uint64_t>(in.size(), sample_bytes);
-            std::vector<uint8_t> scratch(misa77::compress_bound(sample));
+            std::vector<uint8_t> scratch(misa77::compress_bound(sample, misa77::config()));
             const auto tc = clk::now();
             const param p = misa77::experimental::suggest_homogeneous(
                 in.data(), sample, scratch.data(), scratch.size(), option);

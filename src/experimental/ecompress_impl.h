@@ -20,6 +20,9 @@ namespace misa77
 {
     namespace experimental
     {
+        // The experimental compressors emit the light format.
+        using namespace light;
+
         namespace
         {
             static_assert(max_match_len >= 32);
@@ -98,7 +101,7 @@ namespace misa77
             if (given.use_default)
                 return compress(src, src_size, dst, dst_cap);
 
-            if (compress_bound(src_size) > dst_cap)
+            if (compress_bound(src_size, config()) > dst_cap)
                 return 0;
 
             // Left pointer in the destination buffer (metadata and control bytes)
