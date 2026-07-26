@@ -8,7 +8,7 @@
 
 // Library version
 #define MISA77_VERSION_MAJOR 0
-#define MISA77_VERSION_MINOR 4
+#define MISA77_VERSION_MINOR 5
 #define MISA77_VERSION_PATCH 0
 #define MISA77_VERSION_NUMBER                                                                      \
     (MISA77_VERSION_MAJOR * 10000 + MISA77_VERSION_MINOR * 100 + MISA77_VERSION_PATCH)

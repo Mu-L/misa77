@@ -21,6 +21,7 @@ set(MISA77_MARCH "${MISA77_MARCH_DEFAULT}" CACHE STRING "-march for the misa77 d
 add_library(misa77
     src/format.h
     src/util.h
+    src/suffix/sais.h
     src/decompressor_zoo/unsafe_decompress_impl.h
     src/decompressor_zoo/safe_decompress_impl.h
     src/decompressor_zoo/heavy_unsafe_decompress_impl.h

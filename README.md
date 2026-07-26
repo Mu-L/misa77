@@ -1,20 +1,20 @@
-# misa77 (0.4.0)
+# misa77 (0.5.0)
 
 misa77 is an LZ-based codec that targets the write-once, read-many niche. In particular, it aims to satisfy the following criteria:
 
 - Extremely high decompression throughput (single-threaded).
 - Modest compression ratios (LZ4 at high effort levels is a good reference point).
-- Constant memory use, regardless of input size (5-16 MB depending on compression mode, and 0 MB for decompression).
+- Constant memory use during compression, regardless of input size (5-16 MB for levels 0-1, ~160 MB for level 2). Decompression uses no extra memory.
 
 Slow compression is the obvious tradeoff that one makes to achieve the above.
 
 In addition, misa77 has a somewhat synergizing tendency to decompress highly compressed files faster. This makes high-effort compression particularly attractive for misa77, and inspires some experimental compression modes (refer to [src/experimental/](src/experimental/)) that aim to spend more effort at compression time to produce a compressed stream that is friendlier to the microarchitectures of most CPUs when decompressing said streams.
 
-misa77 has three compression effort levels as of v0.4.0:
+misa77 has three compression effort levels as of v0.5.0:
 
 - level 0: offers better decode throughput, slightly worse ratio, similar encode throughput
 - level 1 (default): offers slightly worse decode throughput, better ratio, similar encode throughput
-- level 2: offers similar decode throughput to level 1, the best ratio (around that of `lz4hc -12`), very low encode throughput
+- level 2: offers similar decode throughput to level 1, the best ratio (slightly better than `lz4hc -12`), very low encode throughput
 
 There are two decompressor modes:
 
@@ -52,23 +52,23 @@ Details:
 
 | Compressor name       | Compression | Decompress. |  Ratio | Filename    |
 | --------------------- | ----------- | ----------- | ------ | ----------- |
-| misa77 0.4.0 -0       |   54.3 MB/s |   5371 MB/s |  42.64 | silesia.tar |
-| misa77 0.4.0 safe -0  |   54.3 MB/s |   5201 MB/s |  42.64 | silesia.tar |
-| misa77 0.4.0 -1       |   51.2 MB/s |   4381 MB/s |  39.65 | silesia.tar |
-| misa77 0.4.0 -2       |   2.48 MB/s |   4326 MB/s |  36.40 | silesia.tar |
-| misa77 0.4.0 safe -1  |   51.3 MB/s |   4251 MB/s |  39.65 | silesia.tar |
-| zxc 0.13.1 -3         |    116 MB/s |   2835 MB/s |  45.46 | silesia.tar |
-| zxc 0.13.1 -4         |   81.1 MB/s |   2724 MB/s |  42.63 | silesia.tar |
-| lzsse8fast 2019-04-18 |    183 MB/s |   2670 MB/s |  44.80 | silesia.tar |
-| zxc 0.13.1 -5         |   48.3 MB/s |   2597 MB/s |  40.25 | silesia.tar |
-| lzsse4fast 2019-04-18 |    187 MB/s |   2539 MB/s |  45.26 | silesia.tar |
-| lz4hc 1.10.0 -12      |   7.31 MB/s |   2532 MB/s |  36.45 | silesia.tar |
-| lz4 1.10.0            |    370 MB/s |   2508 MB/s |  47.59 | silesia.tar |
-| lz4hc 1.10.0 -9       |   21.9 MB/s |   2460 MB/s |  36.75 | silesia.tar |
-| lzav 5.11 -2          |   58.9 MB/s |   1727 MB/s |  34.97 | silesia.tar |
-| zxc 0.13.1 -7         |   4.26 MB/s |   1644 MB/s |  33.00 | silesia.tar |
-| zstd 1.5.7 -1         |    295 MB/s |    902 MB/s |  34.54 | silesia.tar |
-| snappy 1.2.2          |    376 MB/s |    857 MB/s |  47.89 | silesia.tar |
+| misa77 0.5.0 -0       |   54.3 MB/s |   5359 MB/s |  42.64 | silesia.tar |
+| misa77 0.5.0 safe -0  |   54.1 MB/s |   5216 MB/s |  42.64 | silesia.tar |
+| misa77 0.5.0 -2       |   7.01 MB/s |   4470 MB/s |  35.51 | silesia.tar |
+| misa77 0.5.0 -1       |   51.2 MB/s |   4378 MB/s |  39.65 | silesia.tar |
+| misa77 0.5.0 safe -1  |   51.2 MB/s |   4252 MB/s |  39.65 | silesia.tar |
+| zxc 0.13.1 -3         |    116 MB/s |   2838 MB/s |  45.46 | silesia.tar |
+| zxc 0.13.1 -4         |   81.2 MB/s |   2726 MB/s |  42.63 | silesia.tar |
+| lzsse8fast 2019-04-18 |    183 MB/s |   2663 MB/s |  44.80 | silesia.tar |
+| zxc 0.13.1 -5         |   48.4 MB/s |   2602 MB/s |  40.25 | silesia.tar |
+| lz4hc 1.10.0 -12      |   7.31 MB/s |   2531 MB/s |  36.45 | silesia.tar |
+| lzsse4fast 2019-04-18 |    187 MB/s |   2525 MB/s |  45.26 | silesia.tar |
+| lz4 1.10.0            |    371 MB/s |   2506 MB/s |  47.59 | silesia.tar |
+| lz4hc 1.10.0 -9       |   22.0 MB/s |   2454 MB/s |  36.75 | silesia.tar |
+| lzav 5.11 -2          |   58.4 MB/s |   1729 MB/s |  34.97 | silesia.tar |
+| zxc 0.13.1 -7         |   4.27 MB/s |   1645 MB/s |  33.00 | silesia.tar |
+| zstd 1.5.7 -1         |    297 MB/s |    903 MB/s |  34.54 | silesia.tar |
+| snappy 1.2.2          |    376 MB/s |    858 MB/s |  47.89 | silesia.tar |
 
 ---
 
@@ -80,21 +80,21 @@ Details:
 
 | Compressor name      | Compression | Decompress. |  Ratio | Filename    |
 | -------------------- | ----------- | ----------- | ------ | ----------- |
-| misa77 0.4.0 -0      |    133 MB/s |  12577 MB/s |  42.64 | silesia.tar |
-| misa77 0.4.0 safe -0 |    132 MB/s |  12407 MB/s |  42.64 | silesia.tar |
-| misa77 0.4.0 -1      |    123 MB/s |  10170 MB/s |  39.65 | silesia.tar |
-| misa77 0.4.0 -2      |   6.73 MB/s |  10071 MB/s |  36.40 | silesia.tar |
-| misa77 0.4.0 safe -1 |    125 MB/s |  10049 MB/s |  39.65 | silesia.tar |
-| zxc 0.13.1 -3        |    275 MB/s |   7999 MB/s |  45.77 | silesia.tar |
-| zxc 0.13.1 -4        |    189 MB/s |   7621 MB/s |  43.20 | silesia.tar |
-| zxc 0.13.1 -5        |    109 MB/s |   7131 MB/s |  40.30 | silesia.tar |
-| lz4 1.10.0           |    904 MB/s |   5221 MB/s |  47.59 | silesia.tar |
-| lz4hc 1.10.0 -9      |   50.6 MB/s |   4864 MB/s |  36.74 | silesia.tar |
-| lz4hc 1.10.0 -12     |   16.6 MB/s |   4862 MB/s |  36.45 | silesia.tar |
-| zxc 0.13.1 -7        |   9.67 MB/s |   4307 MB/s |  33.01 | silesia.tar |
-| lzav 5.11 -2         |    169 MB/s |   4232 MB/s |  34.97 | silesia.tar |
-| snappy 1.2.2         |    961 MB/s |   3423 MB/s |  47.91 | silesia.tar |
-| zstd 1.5.7 -1        |    713 MB/s |   1634 MB/s |  34.54 | silesia.tar |
+| misa77 0.5.0 -0      |    134 MB/s |  12660 MB/s |  42.64 | silesia.tar |
+| misa77 0.5.0 safe -0 |    134 MB/s |  12484 MB/s |  42.64 | silesia.tar |
+| misa77 0.5.0 -1      |    127 MB/s |  10270 MB/s |  39.65 | silesia.tar |
+| misa77 0.5.0 safe -1 |    127 MB/s |  10100 MB/s |  39.65 | silesia.tar |
+| misa77 0.5.0 -2      |   13.6 MB/s |   9935 MB/s |  35.51 | silesia.tar |
+| zxc 0.13.1 -3        |    279 MB/s |   8030 MB/s |  45.77 | silesia.tar |
+| zxc 0.13.1 -4        |    193 MB/s |   7663 MB/s |  43.20 | silesia.tar |
+| zxc 0.13.1 -5        |    115 MB/s |   7166 MB/s |  40.30 | silesia.tar |
+| lz4 1.10.0           |    882 MB/s |   5166 MB/s |  47.59 | silesia.tar |
+| lz4hc 1.10.0 -9      |   53.2 MB/s |   4885 MB/s |  36.74 | silesia.tar |
+| lz4hc 1.10.0 -12     |   17.0 MB/s |   4883 MB/s |  36.45 | silesia.tar |
+| zxc 0.13.1 -7        |   9.78 MB/s |   4310 MB/s |  33.01 | silesia.tar |
+| lzav 5.11 -2         |    175 MB/s |   4261 MB/s |  34.97 | silesia.tar |
+| snappy 1.2.2         |    967 MB/s |   3438 MB/s |  47.91 | silesia.tar |
+| zstd 1.5.7 -1        |    722 MB/s |   1615 MB/s |  34.54 | silesia.tar |
 
 ---
 
@@ -102,14 +102,14 @@ As misa77's performance is quite "spiky" (depending on the shape of the data bei
 
 Note: 
 
-- The visuals that follow are derived from the benchmark results at [misc/lzbench-results-archive/0.4.0/intel.txt](misc/lzbench-results-archive/0.4.0/intel.txt)
+- The visuals that follow are derived from the benchmark results at [misc/lzbench-results-archive/0.5.0/intel.txt](misc/lzbench-results-archive/0.5.0/intel.txt)
 - These results are with the same x86-64 (Intel) setup mentioned previously.
 
 ### Decode speed relative to lz4
 
 At level 0, misa77 decodes faster than lz4 on all 12 files (some by huge margins). Levels 1 and 2 decode faster on 11/12 files each, while compressing substantially better than lz4 everywhere. The exception is `x-ray`, which is highly incompressible (lz4 has a ratio of nearly 1.0 on this file and essentially devolves to a `memcpy`).
 
-![misa77 per-file decode speed vs lz4, levels 0-2, Silesia (Intel)](misc/lzbench-results-archive/0.4.0/speedup_vs_lz4.png)
+![misa77 per-file decode speed vs lz4, levels 0-2, Silesia (Intel)](misc/lzbench-results-archive/0.5.0/speedup_vs_lz4.png)
 
 ### Throughput vs ratio, against popular fast-decode codecs
 
@@ -117,7 +117,7 @@ On the compressible files, misa77 sits on the decode-throughput/ratio Pareto fro
 
 To spot misa77 in these graphs, just look for the circles near the top :)
 
-![misa77 vs other codecs: per-file decode throughput vs ratio, Silesia (Intel), levels 0-2](misc/lzbench-results-archive/0.4.0/pareto_silesia.png)
+![misa77 vs other codecs: per-file decode throughput vs ratio, Silesia (Intel), levels 0-2](misc/lzbench-results-archive/0.5.0/pareto_silesia.png)
 
 ## Requirements
 
@@ -174,7 +174,7 @@ std::vector<uint8_t> output(misa77::decompressed_buffer_bound(original_size));
 uint64_t written = misa77::decompress(compressed.data(), csize, output.data(), output.size(), misa77::dconfig(true));
 ```
 
-Two things to keep in mind:
+Three things to keep in mind:
 
 - You must size the destination buffers with `compress_bound` / `decompressed_buffer_bound`, passing `compress_bound` the same `config` you compress with (the bound depends on the level's format).
 - You must pass `misa77::dconfig(true)` to `misa77::decompress` if you want the decompressor to exit gracefully on invalid input.
